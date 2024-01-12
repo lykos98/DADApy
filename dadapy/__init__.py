@@ -1,4 +1,5 @@
 from ._utils.utils import *
+from .dadac.dadac import *
 from .base import Base
 from .clustering import Clustering
 from .data import Data

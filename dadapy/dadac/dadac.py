@@ -81,15 +81,15 @@ class Clusters(ct.Structure):
 class _dadac_loader():
     def __init__(self):
         path = os.path.join(os.path.dirname(__file__), "bin/dadac_for_py")
+        path2 = os.path.join(os.path.dirname(__file__), "bin/libdadac.so")
         print(path)
         if not os.path.exists(path):
-            print("dadac is not built yet, calling make for you")
             try:
-                os.system(f"make -C {os.path.dirname(__file__)}")
+                os.system(f"cp {path} {path2}")
             except:
                 print("Cannot build dadac")
 
-        self.lib = ct.CDLL(path)
+        self.lib = ct.CDLL(path2)
 
         global ctFloatType, ctIdxType
         s = self.lib.FloatAndUintSize()

@@ -116,7 +116,7 @@ setup(
     ext_modules=ext_modules,
     include_package_data=True,
     package_data={"dadapy":["dadac/bin/*.so","_utils/discrete_volumes/*.dat"],
-                  "dadac":["bin/*.so"]},
+                  "dadapy.dadac":["bin/*.so"]},
 
 
 )

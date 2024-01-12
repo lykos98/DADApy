@@ -109,14 +109,14 @@ class RunMake(install):
 
 setup(
     packages=["dadapy", "dadapy._utils","dadapy.dadac"],
-    ext_modules=ext_modules,
-    include_package_data=True,
-    package_data={"dadapy":["_utils/discrete_volumes/*.dat","dadac/*"],
-                  },
     cmdclass=
     {
         'install': RunMake
-    },
+        },
+    ext_modules=ext_modules,
+    include_package_data=True,
+    package_data={"dadapy":["dadac/bin/*.so","_utils/discrete_volumes/*.dat"],
+                  },
 
 
 )

@@ -48,6 +48,7 @@ driver.o: driver.c
 
 bin/libdadac.so: bin/dadac.o bin/kdtree.o bin/kdtreeV2.o bin/heap.o bin/vptree.o bin/vptreeV2.o
 	${CC} -shared bin/dadac.o bin/kdtree.o bin/heap.o bin/vptree.o bin/vptreeV2.o bin/kdtreeV2.o ${DEBUG} ${CFLAGS} ${LDFLAGS}  -o bin/libdadac.so 
+	@cp bin/libdadac.so dadac_for_py
 	${LINKING_INFO}
 
 bin/%.o : src/%.c
@@ -55,4 +56,4 @@ bin/%.o : src/%.c
 	${COMPILING_INFO}
 
 clean:
-	rm bin/*.so bin/*.o *.o driver test
+	rm bin/*.so bin/*.o *.o driver test dadac_for_py

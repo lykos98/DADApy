@@ -80,7 +80,7 @@ class Clusters(ct.Structure):
     ]
 class _dadac_loader():
     def __init__(self):
-        path = os.path.join(os.path.dirname(__file__), "bin/libdadac.so")
+        path = os.path.join(os.path.dirname(__file__), "bin/dadac_for_py")
         print(path)
         if not os.path.exists(path):
             print("dadac is not built yet, calling make for you")

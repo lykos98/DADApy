@@ -92,7 +92,6 @@ ext_modules += [ext_parallel]
 
 #compile dadac
 
-os.system("make -C $(pwd)/dadac")
 
 EXT_DIR = os.path.join(os.path.dirname(__file__), 'dadapy/dadac')
 class RunMake(install):
@@ -102,7 +101,7 @@ class RunMake(install):
         try:
             os.chdir(EXT_DIR)
             print("Building C library ...")
-            os.system("make")
+            os.system("make lib")
             #self.spawn(['make'])
         finally:
             os.chdir(old_dir)

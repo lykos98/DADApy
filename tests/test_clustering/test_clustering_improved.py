@@ -36,7 +36,7 @@ def test_clustering_all_to_all_methods():
     X = np.genfromtxt(f"{path}/Fig1.dat")
     X = X[:5000]
     cl = data.Data(coordinates=X)
-    _ = cl.compute_clustering_ADP(v2=False)
+    _ = cl.compute_clustering_ADP(impl="py",v2=False)
     nclusters_adp = cl.N_clusters
     assignment_adp = cl.cluster_assignment
     centers_adp = np.array(cl.cluster_centers)
@@ -47,13 +47,24 @@ def test_clustering_all_to_all_methods():
     X = np.genfromtxt(f"{path}/Fig1.dat")
     X = X[:5000]
     cl = data.Data(coordinates=X)
-    _ = cl.compute_clustering_ADP(v2=True)
+    _ = cl.compute_clustering_ADP(impl="py",v2=True)
     nclusters_adp_v2 = cl.N_clusters
     assignment_adp_v2 = cl.cluster_assignment
     centers_adp_v2 = np.array(cl.cluster_centers)
     saddle_density_adp_v2 = cl.log_den_bord
     saddle_err_adp_v2 = cl.log_den_bord_err
     bord_indices_adp_v2 = cl.bord_indices
+
+    X = np.genfromtxt(f"{path}/Fig1.dat")
+    X = X[:5000]
+    cl = data.Data(coordinates=X)
+    _ = cl.compute_clustering_ADP(impl="c",v2=True)
+    nclusters_adp_c = cl.N_clusters
+    assignment_adp_c = cl.cluster_assignment
+    centers_adp_c = np.array(cl.cluster_centers)
+    saddle_density_adp_c = cl.log_den_bord
+    saddle_err_adp_c = cl.log_den_bord_err
+    bord_indices_adp_c = cl.bord_indices
 
 
     X = np.genfromtxt(f"{path}/Fig1.dat")
@@ -89,7 +100,7 @@ def test_clustering_all_to_all_methods():
     assert np.allclose(saddle_density_adp, saddle_density_gt)
     assert np.allclose(saddle_err_adp, saddle_err_gt)
 
-    # ADPv2 consisten with ADP
+    # ADPv2 consistent with ADP
     assert nclusters_adp == nclusters_adp_v2
     assert np.all(assignment_adp == assignment_adp_v2)
     assert np.all(centers_adp == centers_adp_v2)
@@ -97,7 +108,16 @@ def test_clustering_all_to_all_methods():
     assert np.allclose(saddle_density_adp, saddle_density_adp_v2)
     assert np.allclose(saddle_err_adp, saddle_err_adp_v2)
 
-    # pure python consisten with ADP
+    # ADP_c consistent with ADP
+    assert nclusters_adp == nclusters_adp_c
+    assert np.all(assignment_adp == assignment_adp_c)
+    assert np.all(centers_adp == centers_adp_c)
+    assert np.all(bord_indices_adp == bord_indices_adp_c)
+    assert np.allclose(saddle_density_adp, saddle_density_adp_c)
+    assert np.allclose(saddle_err_adp, saddle_err_adp_c)
+
+
+    # pure python consistent with ADP
     assert nclusters_adp == nclusters_pp
     assert np.all(assignment_adp == assignment_pp)
     assert np.all(centers_adp == centers_pp)
@@ -105,7 +125,7 @@ def test_clustering_all_to_all_methods():
     assert np.allclose(saddle_density_adp, saddle_density_pp)
     assert np.allclose(saddle_err_adp, saddle_err_pp)
 
-    # pure python v2 consisten with ADP
+    # pure python v2 consistent with ADP
     assert nclusters_adp == nclusters_pp_v2
     assert np.all(assignment_adp == assignment_pp_v2)
     assert np.all(centers_adp == centers_pp_v2)

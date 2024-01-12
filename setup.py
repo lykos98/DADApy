@@ -111,7 +111,7 @@ setup(
     packages=["dadapy", "dadapy._utils","dadapy.dadac"],
     ext_modules=ext_modules,
     include_package_data=True,
-    package_data={"dadapy":["dadac/bin/*","_utils/discrete_volumes/*.dat"],
+    package_data={"dadapy":["dadac/bin/*","dadac/bin/libdadac.so","_utils/discrete_volumes/*.dat"],
                   "dadapy.dadac":["bin/*"]},
     cmdclass=
     {

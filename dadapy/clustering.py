@@ -176,7 +176,7 @@ class Clustering(DensityEstimation):
             log_den_min = np.min(self.log_den - Z * self.log_den_err)
             dadac_handler.import_density(self.log_den, self.log_den_err, self.kstar)
             dadac_handler.import_neighbors_and_distances(self.dist_indices, self.distances)
-            dadac_handler.compute_clustering_ADP(Z)
+            dadac_handler.compute_clustering_ADP(Z,halo)
 
             print("Exporting results to python")
 

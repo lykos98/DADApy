@@ -304,7 +304,7 @@ class Data(_dadac_loader):
 
     def _is_notebook(self) -> bool:
         try:
-            shell = get_ipython()._class_._name_
+            shell = get_ipython().__class__.__name__
             if shell == 'ZMQInteractiveShell':
                 print("You are running in a notebook maybe the timing output will break, but everything should be fine ")
                 return True   # Jupyter notebook or qtconsole

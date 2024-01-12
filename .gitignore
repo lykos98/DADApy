@@ -64,7 +64,7 @@ flycheck_*.el
 
 # Distribution / packaging
 .Python
-bin/
+#bin/
 build/
 develop-eggs/
 dist/

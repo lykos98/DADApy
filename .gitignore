@@ -60,7 +60,7 @@ flycheck_*.el
 *$py.class
 
 # C extensions
-*.so
+#*.so
 
 # Distribution / packaging
 .Python

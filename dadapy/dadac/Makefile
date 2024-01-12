@@ -24,6 +24,7 @@ LINKING_INFO=@echo "[\e[34mLINKING\e[0m]: $@"
 
 
 lib: bin/libdadac.so 
+	@mkdir -p bin
 
 all: driver test
 	@echo "[\e[31mFLAGS\e[0m]: ${CFLAGS}"

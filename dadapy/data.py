@@ -44,7 +44,7 @@ class Data(Clustering, MetricComparisons):
         maxk=None,
         verbose=False,
         njobs=cores,
-        working_memory=1024,
+        working_memory=1024
     ):
         """Initialise a Data object, container of all DADApy methods.
 

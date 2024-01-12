@@ -1,6 +1,7 @@
 import os
 
-from setuptools import Extension, setup
+from setuptools import Extension, setup 
+from setuptools.command.install import install
 
 
 class get_numpy_include(object):
@@ -89,9 +90,33 @@ if os.system(command) == "OpenMP supported":
 
 ext_modules += [ext_parallel]
 
+#compile dadac
+
+os.system("make -C $(pwd)/dadac")
+
+EXT_DIR = os.path.join(os.path.dirname(__file__), 'dadapy/dadac')
+class RunMake(install):
+    """Makefile on setuptools install."""
+    def run(self):
+        old_dir = os.getcwd()
+        try:
+            os.chdir(EXT_DIR)
+            print("Building C library ...")
+            os.system("make")
+            #self.spawn(['make'])
+        finally:
+            os.chdir(old_dir)
+        install.run(self)
+
 setup(
-    packages=["dadapy", "dadapy._utils"],
+    packages=["dadapy", "dadapy._utils","dadapy.dadac"],
     ext_modules=ext_modules,
     include_package_data=True,
-    package_data={"dadapy": ["_utils/discrete_volumes/*.dat"]},
+    package_data={"dadapy": ["_utils/discrete_volumes/*.dat","dadac/bin/*.so"]},
+    cmdclass=
+    {
+        'install': RunMake
+    },
+
+
 )

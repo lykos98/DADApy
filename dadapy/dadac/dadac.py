@@ -83,7 +83,7 @@ class _dadac_loader():
         path = os.path.join(os.path.dirname(__file__), "bin/dadac_for_py")
         path2 = os.path.join(os.path.dirname(__file__), "bin/libdadac.so")
         print(path)
-        if not os.path.exists(path):
+        if os.path.exists(path):
             try:
                 os.system(f"cp {path} {path2}")
             except:

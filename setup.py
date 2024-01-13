@@ -108,11 +108,11 @@ class RunMake(install):
         install.run(self)
 
 setup(
-    #packages=["dadapy", "dadapy._utils","dadapy.dadac"],
-    packages=find_packages(exclude=["tests","*.tests","*.tests.*","tests.*"]),
+    packages=["dadapy", "dadapy._utils","dadapy.dadac"],
+    #packages=find_packages(exclude=["tests","*.tests","*.tests.*","tests.*"]),
     ext_modules=ext_modules,
     include_package_data=True,
-    package_data={"dadapy":["dadac/bin/*","_utils/discrete_volumes/*.dat"],
+    package_data={"dadapy":["dadac/bin/*","dadac/hehe/*","_utils/discrete_volumes/*.dat"],
                   "dadapy.dadac":["bin/*"]},
     cmdclass=
     {

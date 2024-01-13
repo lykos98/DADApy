@@ -116,7 +116,7 @@ setup(
                   "dadapy.dadac":["bin/*"]},
     cmdclass=
     {
-        'install': RunMake
+        'intall': RunMake
     },
 
 

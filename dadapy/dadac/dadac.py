@@ -82,12 +82,12 @@ class _dadac_loader():
     def __init__(self):
         path = os.path.join(os.path.dirname(__file__), "bin/dadac_for_py")
         path2 = os.path.join(os.path.dirname(__file__), "bin/libdadac.so")
-        print(path)
-        if os.path.exists(path):
-            try:
-                os.system(f"cp {path} {path2}")
-            except:
-                print("Cannot build dadac")
+        print(path2)
+        #if os.path.exists(path):
+        #    try:
+        #        os.system(f"cp {path} {path2}")
+        #    except:
+        #        print("Cannot build dadac")
 
         self.lib = ct.CDLL(path2)
 

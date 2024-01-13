@@ -1,6 +1,6 @@
 import os
 
-from setuptools import Extension, setup 
+from setuptools import Extension, setup, find_packages 
 from setuptools.command.install import install
 
 
@@ -108,7 +108,8 @@ class RunMake(install):
         install.run(self)
 
 setup(
-    packages=["dadapy", "dadapy._utils","dadapy.dadac"],
+    #packages=["dadapy", "dadapy._utils","dadapy.dadac"],
+    packages=find_packages(exclude=["tests","*.tests","*.tests.*","tests.*"]),
     ext_modules=ext_modules,
     include_package_data=True,
     package_data={"dadapy":["dadac/bin/*","_utils/discrete_volumes/*.dat"],

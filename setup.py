@@ -93,7 +93,7 @@ ext_modules += [ext_parallel]
 #compile dadac
 
 
-EXT_DIR = os.path.join(os.path.dirname(__file__), 'dadac/bin')
+EXT_DIR = os.path.join(os.path.dirname(__file__), 'dadapy/dadac/bin')
 class RunMake(install):
     """Makefile on setuptools install."""
     def run(self):

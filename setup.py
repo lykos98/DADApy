@@ -112,7 +112,7 @@ setup(
     #packages=find_packages(exclude=["tests","*.tests","*.tests.*","tests.*"]),
     ext_modules=ext_modules,
     include_package_data=True,
-    package_data={"dadapy":["dadac/bin/*","dadac/hehe/*","_utils/discrete_volumes/*.dat"],
+    package_data={"dadapy":["dadac/bin/*","dadac/lib/*","_utils/discrete_volumes/*.dat"],
                   "dadapy.dadac":["bin/*"]},
     cmdclass=
     {

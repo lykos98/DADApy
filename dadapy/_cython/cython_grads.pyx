@@ -4,6 +4,7 @@ import cython
 import numpy as np
 
 cimport numpy as np
+from cython.parallel import prange
 
 DTYPE = np.int_
 floatTYPE = np.float_
@@ -232,30 +233,34 @@ def return_diag_inv_deltaFs_cross_covariance_LSDI(long[:,:] nind_list,      # ns
     denom_nonview   = np.zeros(nspar, dtype=np.float_)
     cdef double[::1] denom = denom_nonview
 
-    cdef double gamma, ptot, sgn
-    cdef int i,j,l,m,a,b  
+    cdef double gamma,sgn
+    cdef int i,j,l,m,a,b
+    cdef np.ndarray[DTYPE_t, ndim = 1] ptot = np.zeros(nspar, dtype = np.int_)
 
-    for a in range(nspar):
+    for a in prange(nspar, nogil = True):
         i = nind_list[a, 0]
         j = nind_list[a, 1]
         inv_Gamma[a] = Fij_var_array[a]
         denom[a] += Fij_var_array[a]*Fij_var_array[a]
+
+
         for b in range(a+1, nspar):
             l = nind_list[b, 0]
             m = nind_list[b, 1]
             gamma = 0
-            ptot = 0
+            ptot[a] = 0
+            
             if p[i,l] != 0:
-                ptot += 1
+                ptot[a] += 1
                 gamma += p[i,l]*seps0[a]*seps0[b]
             if p[i,m] != 0:
                 gamma += p[i,m]*seps0[a]*seps1[b]
             if p[j,l] != 0:
-                ptot += 1
+                ptot[a] += 1
                 gamma += p[j,l]*seps1[a]*seps0[b]
             if p[j,m] != 0:
                 gamma += p[j,m]*seps1[a]*seps1[b]
-            if ptot != 0:
+            if ptot[a] != 0:
                 denom[a] += gamma * gamma / 16.
                 denom[b] += gamma * gamma / 16.
         

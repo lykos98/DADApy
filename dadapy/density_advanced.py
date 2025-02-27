@@ -507,8 +507,6 @@ class DensityAdvanced(DensityEstimation, NeighGraph):
         log_den = self._solve_BMTI_reg_linar_system(A, deltaFcum, solver, sp_direct_perm_spec)
         self.log_den = log_den
 
-        self.A = A
-
         if self.verb:
             print("{0:0.2f} seconds to solve linear system".format(time.time() - sec2))
             sec2 = time.time()

@@ -526,8 +526,8 @@ class DensityAdvanced(DensityEstimation, NeighGraph):
                 if self.verb:
                     print("{0:0.2f} seconds inverting A matrix".format(time.time() - sec2))
 
-                sec2 = time.time()
         elif comp_log_den_err == "LSDI":
+                sec2 = time.time()
                 print("Getting approximate inverse through LSDI")
                 A_sq = A**2
                 A_sq_sum = A_sq.sum(axis = 0)
@@ -539,6 +539,7 @@ class DensityAdvanced(DensityEstimation, NeighGraph):
                     B = A.diagonal() / A_sq.sum(axis = 0)
 
                 self.log_den_err = np.sqrt(B)
+                self.B = B
                 if self.verb:
                     print("{0:0.2f} seconds inverting A matrix".format(time.time() - sec2))
 

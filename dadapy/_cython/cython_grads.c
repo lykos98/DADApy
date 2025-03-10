@@ -28878,7 +28878,7 @@ static PyObject *__pyx_pf_6dadapy_7_cython_12cython_grads_26return_fij_oneway(CY
  *         gj = grads[j,:]
  * 
  *         fij_i[edge] = np.dot(gi, neigh_vector_diffs[edge,:])             # <<<<<<<<<<<<<<
- *         fij_i[edge] = np.dot(gj, neigh_vector_diffs[edge,:])
+ *         fij_j[edge] = np.dot(gj, neigh_vector_diffs[edge,:])
  *     return fij_i, fij_j
  */
     __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_np); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 542, __pyx_L1_error)
@@ -28926,7 +28926,7 @@ static PyObject *__pyx_pf_6dadapy_7_cython_12cython_grads_26return_fij_oneway(CY
     /* "dadapy/_cython/cython_grads.pyx":543
  * 
  *         fij_i[edge] = np.dot(gi, neigh_vector_diffs[edge,:])
- *         fij_i[edge] = np.dot(gj, neigh_vector_diffs[edge,:])             # <<<<<<<<<<<<<<
+ *         fij_j[edge] = np.dot(gj, neigh_vector_diffs[edge,:])             # <<<<<<<<<<<<<<
  *     return fij_i, fij_j
  * 
  */
@@ -28969,7 +28969,7 @@ static PyObject *__pyx_pf_6dadapy_7_cython_12cython_grads_26return_fij_oneway(CY
       __Pyx_GOTREF(__pyx_t_2);
       __Pyx_DECREF(__pyx_t_11); __pyx_t_11 = 0;
     }
-    if (unlikely((PyObject_SetItem(((PyObject *)__pyx_v_fij_i), __pyx_v_edge, __pyx_t_2) < 0))) __PYX_ERR(0, 543, __pyx_L1_error)
+    if (unlikely((PyObject_SetItem(((PyObject *)__pyx_v_fij_j), __pyx_v_edge, __pyx_t_2) < 0))) __PYX_ERR(0, 543, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
     /* "dadapy/_cython/cython_grads.pyx":535
@@ -28984,7 +28984,7 @@ static PyObject *__pyx_pf_6dadapy_7_cython_12cython_grads_26return_fij_oneway(CY
 
   /* "dadapy/_cython/cython_grads.pyx":544
  *         fij_i[edge] = np.dot(gi, neigh_vector_diffs[edge,:])
- *         fij_i[edge] = np.dot(gj, neigh_vector_diffs[edge,:])
+ *         fij_j[edge] = np.dot(gj, neigh_vector_diffs[edge,:])
  *     return fij_i, fij_j             # <<<<<<<<<<<<<<
  * 
  * 

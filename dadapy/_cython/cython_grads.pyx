@@ -540,7 +540,7 @@ def return_fij_oneway(  np.ndarray[DTYPE_t, ndim = 2] nind_list,
         gj = grads[j,:]
 
         fij_i[edge] = np.dot(gi, neigh_vector_diffs[edge,:]) 
-        fij_i[edge] = np.dot(gj, neigh_vector_diffs[edge,:]) 
+        fij_j[edge] = np.dot(gj, neigh_vector_diffs[edge,:]) 
     return fij_i, fij_j
 
 

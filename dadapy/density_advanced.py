@@ -340,6 +340,8 @@ class DensityAdvanced(DensityEstimation, NeighGraph):
         #    )
         #)
         epsi, epsj = cgr.return_fij_var(self.nind_list, self.neigh_vector_diffs, self.grads_covmat)
+        epsi = np.sqrt(epsi)
+        epsj = np.sqrt(epsj)
 
 
         # compute epsilon^i_ij * sgn(deltaF^i_ij)

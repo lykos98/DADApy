@@ -144,8 +144,50 @@ class Clustering(DensityEstimation):
 
     def compute_clustering_SDP(self, top_k_ev: Union[None, int] = None, 
                                      diagnostic_plots: bool = False ):
+        
         """
-        The sdp function
+        Performs Spectral Density Peaks (SDP) clustering.
+
+        This function constructs a transition probability matrix using a random walk approach, 
+        computes its eigenvalues and eigenvectors, and then applies k-means clustering to 
+        group data points based on spectral components. 
+
+        The method follows these steps:
+        1. Validates input data and ensures required attributes are computed.
+        2. Builds a sparse random walk transition matrix.
+        3. Computes the top eigenvalues and eigenvectors of the transition matrix.
+        4. Identifies an optimal number of clusters using eigenvalue gaps.
+        5. Applies k-means clustering to the top eigenvectors.
+        6. Identifies density peaks as cluster representatives.
+        7. Optionally visualizes the results with diagnostic plots.
+
+        Args:
+            top_k_ev (int, optional): Number of top eigenvalues to retain. If not provided, 
+                it is heuristically set to the cube root of the number of data points.
+            diagnostic_plots (bool, optional): If True, generates diagnostic plots for 
+                eigenvalues, eigengaps, and clustering results.
+
+        Raises:
+            ValueError: If essential data (distances, density estimates, etc.) are missing.
+
+        Returns:
+            None: The function updates the object's attributes:
+                - `self.N_clusters` (int): Number of clusters found.
+                - `self.cluster_assignment` (ndarray): Cluster labels for each data point.
+                - `self.cluster_centers` (ndarray): Coordinates of the density peaks.
+
+        Notes:
+            - The transition matrix `P` is built using density-based transition probabilities.
+            - Eigenvalues are analyzed to determine an optimal cluster count.
+            - KMeans clustering is performed on the leading eigenvectors.
+            - Density peaks serve as cluster centers.
+            - Diagnostic plots illustrate eigenvalue distribution and clustering structure.
+
+        Example:
+            ```python
+            model = SDPClustering()
+            model.sdp(top_k_ev=10, diagnostic_plots=True)
+            ```
         """
         if self.distances is None or self.dist_indices is None: 
             raise ValueError("Please compute distances between datapoints")

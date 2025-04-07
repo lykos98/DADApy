@@ -108,14 +108,29 @@ class Clustering(DensityEstimation):
 
         """
 
+        if not self._density_computed_w_bmti:
+            #names only for consistency w bmti
+            self.compute_neigh_indices()
+            self.Fij_array     = np.zeros(self.nspar) 
+            self.Fij_var_array = np.zeros(self.nspar) 
+
+            for edge_idx, edge in enumerate(self.nind_list):
+                i, j = edge
+
+                self.Fij_array[edge_idx]      = self.log_den[i] - self.log_den[j]
+                self.Fij_var_array[edge_idx]  = np.sqrt(self.log_den_err[i] ** 2 + self.log_den_err[j] ** 2)
+
+
+
         H = np.empty_like(prototype=self.distances, dtype=np.float64)
         F = np.zeros(shape=self.distances.shape, dtype=np.float64)
         H[:, 0] = 0
         for i in range(self.N):
+            idx_start = self.nind_iptr[i]
             for k in range(1, self.kstar[i]):
-                j = self.dist_indices[i, k]
-                H[i, k] = self.log_den[i] - self.log_den[j]
-                H[i, k] /= np.sqrt(self.log_den_err[i] ** 2 + self.log_den_err[j] ** 2)
+                edge_idx = idx_start + k - 1
+                H[i, k] = self.Fij_array[edge_idx] 
+                H[i, k] /= self.Fij_var_array[edge_idx] 
                 H[i, k] = (1 + sp.special.erf(-H[i, k] / np.sqrt(2))) / 2
         n = 0
         for i in range(self.N):
@@ -143,7 +158,8 @@ class Clustering(DensityEstimation):
         return P
 
     def compute_clustering_SDP(self, top_k_ev: Union[None, int] = None, 
-                                     diagnostic_plots: bool = False ):
+                                     diagnostic_plots: bool = False,
+                                     n_clusters : Union[None,int] = None):
         
         """
         Performs Spectral Density Peaks (SDP) clustering.
@@ -189,14 +205,28 @@ class Clustering(DensityEstimation):
             model.sdp(top_k_ev=10, diagnostic_plots=True)
             ```
         """
+
+        self._density_computed_w_bmti = False
+
         if self.distances is None or self.dist_indices is None: 
             raise ValueError("Please compute distances between datapoints")
 
         if self.log_den is None or self.kstar is None:
-            raise ValueError("Please compute density with one of the methods provided (suggested BMTI, PAk)")
+            print("Density is not provided, using BMTI estimation for delta_f")
+            self.compute_deltaFs()
+            self._density_computed_w_bmti = True
+            self.Fij_array = -self.Fij_array
+            self.Fij_var_array = np.sqrt(self.Fij_var_array)
 
-        if self.log_den_err is None:
-            raise ValueError("Please compute density with explicit error computation")
+            self.log_den     = np.zeros(self.N)
+            self.log_den_err = np.zeros(self.N)
+
+            #avoid having none values, they are not required for clustering procedure
+            #we only need delta_fs with their variance
+        if not (self.log_den is None) and self.log_den_err is None:
+            raise ValueError("log_den appears to be computed but log_den_err is not provided")
+        if not (type(self.log_den) is np.ndarray) or not (type(self.log_den_err) is np.ndarray):
+            raise TypeError("log_den or log_den_err are not np.arrays")
 
         start = time.monotonic()
         P = self._build_random_walk()
@@ -209,7 +239,7 @@ class Clustering(DensityEstimation):
         if top_k_ev is None:
             top_k_ev = int(np.cbrt(self.N)) 
             print(f"Heuristic selection of eigenvals to keep --> {top_k_ev}")
-        elif n_cluser < int(np.cbrt(self.N)):
+        elif top_k_ev < int(np.cbrt(self.N)):
             print(f"Selected number of eigenvals too high, using --> {top_k_ev}")
         else:
             print(f"Using number of eigenvals --> {top_k_ev}")
@@ -239,15 +269,16 @@ class Clustering(DensityEstimation):
             print(f"Computing eigenvals: ")
             print(f"\tElapsed time {stop - start: .2f}s")
 
+        step = int(top_k_ev / 5)
+        s = 1 / top_k_ev * 500
+        eps_ratio = 2
+        n_zeros = np.argmax(a=eigenvalues > 0)
+        if n_negative > 0:
+            eigenvalues -= eigenvalues[0]
+            eps = 10 ** (np.log10(eigenvalues[n_zeros]) - eps_ratio)
+
         if diagnostic_plots:
-            step = int(top_k_ev / 5)
-            s = 1 / top_k_ev * 500
-            eps_ratio = 2
-            if n_negative > 0:
-                eigenvalues -= eigenvalues[0]
-                n_zeros = np.argmax(a=eigenvalues > 0)
-                title += rf" (Shifted) $\quad n_0 = {n_zeros}$"
-                eps = 10 ** (np.log10(eigenvalues[n_zeros]) - eps_ratio)
+            title += rf" (Shifted) $\quad n_0 = {n_zeros}$"
             fig, axs = plt.subplots(
                 ncols=2,
                 figsize=(2 * plt.rcParams["figure.figsize"][0], plt.rcParams["figure.figsize"][1]),
@@ -274,7 +305,7 @@ class Clustering(DensityEstimation):
                 )
                 ax.grid()
 
-            k_min = None
+        k_min = None
 
         if n_negative > 0:
             k_min = n_zeros + 1 if k_min is None else max(n_zeros, k_min)
@@ -282,7 +313,6 @@ class Clustering(DensityEstimation):
             k_min = 2
 
         #find optimal values of eigenvalues to keep
-
 
         k_range = range(k_min, top_k_ev)
         eigengaps = np.diff(a=eigenvalues)[np.array(object=k_range) - 1]
@@ -320,18 +350,12 @@ class Clustering(DensityEstimation):
         #spectral part
         start = time.monotonic()
 
-        n_clusters = optimal_k_values[0]
+        if n_clusters is None or n_clusters <= 0:
+            n_clusters = optimal_k_values[0]
+
         kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(
             X=eigenvectors[:, :n_clusters]
         )
-        density_peaks_indices = {label: None for label in kmeans.labels_}
-        density_peaks = np.zeros(shape=(n_clusters, self.X.shape[1]), dtype=np.float64)
-        for index, label in enumerate(range(n_clusters)):
-            mask = kmeans.labels_ == label
-            subset_index = np.argmax(a=self.log_den[mask])
-            parent_index = np.flatnonzero(mask)[subset_index]
-            density_peaks_indices[label] = parent_index
-            density_peaks[index, :] = self.X[parent_index, :]
 
         stop = time.monotonic()
 
@@ -339,26 +363,10 @@ class Clustering(DensityEstimation):
             print(f"Clustering eigencomponents w/ KMeans: ")
             print(f"\tElapsed time {stop - start: .2f}s")
 
-
-        if diagnostic_plots:
-            fig, ax = plt.subplots(figsize=plt.rcParams["figure.figsize"], layout="tight")
-            title = rf"SDP w/ Density Peaks $\quad {n_clusters}$ Clusters"
-            ax.set(aspect="equal", title=title)
-            ax.scatter(x=self.X[:, 0], y=self.X[:, 1], s=2, c=kmeans.labels_, alpha=0.5, zorder=2)
-            ax.scatter(
-                x=density_peaks[:, 0],
-                y=density_peaks[:, 1],
-                s=100,
-                c=list(set(kmeans.labels_)),
-                marker="D",
-                edgecolors="black",
-                zorder=2,
-            )
-            ax.grid()
-
         self.N_clusters = n_clusters
         self.cluster_assignment = kmeans.labels_
-        self.cluster_centers    = density_peaks
+        #self.cluster_centers    = density_peaks
+
     def compute_clustering_ADP(self, Z=1.65, halo=False, v2=False):
         """Compute clustering according to the algorithm DPA.
 

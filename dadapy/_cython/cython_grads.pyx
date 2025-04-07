@@ -80,7 +80,7 @@ def return_neigh_vector_diffs(np.ndarray[floatTYPE_t, ndim = 2] X,
 
     cdef DTYPE_t i, j, ind_spar, dim
 
-    for ind_spar in range(nspar):
+    for ind_spar in prange(nspar, nogil = True):
         i = nind_list[ind_spar, 0]
         j = nind_list[ind_spar, 1]
         for dim in range(dims):

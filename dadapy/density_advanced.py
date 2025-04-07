@@ -25,8 +25,12 @@ in the NeighGraph class.
 import multiprocessing
 import time
 import warnings
+import jax
 
+import jax.numpy
+import jax.scipy.optimize
 import numpy as np
+
 from scipy import linalg as slin
 from scipy import sparse
 
@@ -36,6 +40,15 @@ from dadapy.density_estimation import DensityEstimation
 from dadapy.neigh_graph import NeighGraph
 
 cores = multiprocessing.cpu_count()
+
+def _compute_log_likelihood_diag(f: jax.numpy.array, 
+                                 c: jax.numpy.array, 
+                                 n_ind_list: jax.numpy.array, 
+                                 delta_fij_est: jax.numpy.array) -> float:
+    fi = f[n_ind_list[:,0]]
+    fj = f[n_ind_list[:,1]]
+    delta_fij = fi - fj - delta_fij_est
+    return -jax.numpy.sum(delta_fij * c * delta_fij)
 
 
 class DensityAdvanced(DensityEstimation, NeighGraph):
@@ -305,13 +318,6 @@ class DensityAdvanced(DensityEstimation, NeighGraph):
             print("Estimation of the directional deltaFs started")
         sec = time.time()
 
-        #Fij_i_oneway = np.einsum(
-        #    "ij, ij -> i", self.grads[self.nind_list[:, 0]], self.neigh_vector_diffs
-        #)
-        #Fij_j_oneway = np.einsum(
-        #    "ij, ij -> i", self.grads[self.nind_list[:, 1]], self.neigh_vector_diffs
-        #)
- 
         Fij_i_oneway, Fij_j_oneway = cgr.return_fij_oneway(self.nind_list, self.grads, self.neigh_vector_diffs)
 
         sec2 = time.time()
@@ -321,24 +327,6 @@ class DensityAdvanced(DensityEstimation, NeighGraph):
             )
         # get grads covariance matrices
 
-        #FT comment: this part is the same as in lines 254
-        #g_var0 = self.grads_covmat[self.nind_list[:, 0]]
-        #g_var1 = self.grads_covmat[self.nind_list[:, 1]]
-        # estimate standard deviations on directional deltaFs
-        #epsi = np.sqrt(
-        #    np.einsum(
-        #        "ij, ij -> i",
-        #        self.neigh_vector_diffs,
-        #        np.einsum("ijk, ik -> ij", g_var0, self.neigh_vector_diffs),
-        #    )
-        #)
-        #epsj = np.sqrt(
-        #    np.einsum(
-        #        "ij, ij -> i",
-        #        self.neigh_vector_diffs,
-        #        np.einsum("ijk, ik -> ij", g_var1, self.neigh_vector_diffs),
-        #    )
-        #)
         epsi, epsj = cgr.return_fij_var(self.nind_list, self.neigh_vector_diffs, self.grads_covmat)
         epsi = np.sqrt(epsi)
         epsj = np.sqrt(epsj)
@@ -411,6 +399,7 @@ class DensityAdvanced(DensityEstimation, NeighGraph):
         delta_F_inv_cov="uncorr",
         comp_log_den_err="no",
         solver="sp_direct",
+        exp_bfgs = True,
         sp_direct_perm_spec="NATURAL",
         alpha=1,
         log_den=None,
@@ -498,6 +487,7 @@ class DensityAdvanced(DensityEstimation, NeighGraph):
 
         sec = time.time()
         # define the likelihood covarince matrix
+
         A, deltaFcum = self._get_BMTI_reg_linear_system(delta_F_inv_cov, alpha)
         A_sq = A**2
 
@@ -561,7 +551,6 @@ class DensityAdvanced(DensityEstimation, NeighGraph):
             print("{0:0.2f} seconds for BMTI density estimation".format(sec2 - sec))
 
     # ----------------------------------------------------------------------------------------------
-
     def _get_BMTI_reg_linear_system(self, delta_F_inv_cov, alpha):
         sec = time.time()
         if delta_F_inv_cov == "uncorr":
@@ -592,6 +581,7 @@ class DensityAdvanced(DensityEstimation, NeighGraph):
                 )
             )
 
+        
         sec = time.time()
         # compute adjacency matrix
         A = sparse.csr_matrix(
@@ -631,6 +621,7 @@ class DensityAdvanced(DensityEstimation, NeighGraph):
             print("{0:0.2f} seconds to fill sparse matrix".format(time.time() - sec))
 
         return A, deltaFcum
+
 
     def _solve_BMTI_reg_linar_system(self, A, deltaFcum, solver, sp_direct_perm_spec):
         if solver == "dense":

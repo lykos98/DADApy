@@ -6,7 +6,7 @@ on:
       - develop
       - main
   pull_request:
-  workflow-dispatch:
+  workflow_dispatch:
 
 jobs:
   run:

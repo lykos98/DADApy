@@ -77,8 +77,6 @@ exts_parallel = [
         sources=["dadapy/_cython/cython_grads.c"],
         include_dirs=[get_numpy_include()],
         define_macros=[("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION")],
-        extra_compile_args = ["-fopenmp"],
-        extra_link_args = ["-fopenmp"]
     )
 ]
 
@@ -108,7 +106,6 @@ if os.system(command) == "OpenMP supported":
     # Installing cython_distances using OpenMP
     for ext_parallel in exts_parallel:
         ext_parallel.extra_compile_args.append("-fopenmp")
-        ext_parallel.extra_compile_args.append("-O3")
         ext_parallel.extra_link_args.append("-fopenmp")
 
 # If OpenMP is not available, the C extension to compute distances in discrete spaces will not run in parallel.

@@ -4,6 +4,7 @@ import cython
 import numpy as np
 
 cimport numpy as np
+from cython.parallel import prange
 
 DTYPE = np.int_
 floatTYPE = np.float_
@@ -53,7 +54,7 @@ def return_neigh_distances_array(   np.ndarray[floatTYPE_t, ndim = 2] distances,
                                     np.ndarray[DTYPE_t, ndim = 1] kstar):
     cdef DTYPE_t N = len(kstar)
     cdef DTYPE_t nspar = kstar.sum() - N
-    cdef np.ndarray[floatTYPE_t, ndim = 1] distarray = np.ndarray((nspar,), dtype=floatTYPE)
+    cdef np.ndarray[floatTYPE_t, ndim = 1] distarray = np.ndarray((nspar,),dtype=floatTYPE)
 
     cdef DTYPE_t i, j, ind_spar
 
@@ -75,11 +76,11 @@ def return_neigh_vector_diffs(np.ndarray[floatTYPE_t, ndim = 2] X,
                               np.ndarray[DTYPE_t, ndim = 2] nind_list):
     cdef DTYPE_t dims = X.shape[1]
     cdef DTYPE_t nspar = nind_list.shape[0]
-    cdef np.ndarray[floatTYPE_t, ndim = 2] vector_diffs = np.ndarray((nspar, dims), dtype=floatTYPE)
+    cdef np.ndarray[floatTYPE_t, ndim = 2] vector_diffs = np.ndarray((nspar, dims))
 
     cdef DTYPE_t i, j, ind_spar, dim
 
-    for ind_spar in range(nspar):
+    for ind_spar in prange(nspar, nogil = True):
         i = nind_list[ind_spar, 0]
         j = nind_list[ind_spar, 1]
         for dim in range(dims):
@@ -97,7 +98,7 @@ def return_neigh_vector_diffs_periodic(np.ndarray[floatTYPE_t, ndim = 2] X,
                               np.ndarray[floatTYPE_t, ndim = 1] period):
     cdef DTYPE_t dims = X.shape[1]
     cdef DTYPE_t nspar = nind_list.shape[0]
-    cdef np.ndarray[floatTYPE_t, ndim = 2] vector_diffs = np.ndarray((nspar, dims), dtype=floatTYPE)
+    cdef np.ndarray[floatTYPE_t, ndim = 2] vector_diffs = np.ndarray((nspar, dims))
 
     cdef DTYPE_t i, j, ind_spar, dim
     cdef floatTYPE_t temp
@@ -130,6 +131,9 @@ def return_common_neighs(np.ndarray[DTYPE_t, ndim = 1] kstar,
     cdef DTYPE_t i, j, ind_spar, count, kstar_i, kstar_j, idx, idx2, val_i, val_j
 
     cdef np.ndarray[DTYPE_t, ndim=1] common_neighs_array = np.zeros(nspar, dtype=np.int_)
+    cdef np.ndarray[DTYPE_t, ndim=2] sorted_dist_indices = np.zeros((N, maxk), dtype=np.int_)
+
+    sorted_dist_indices = np.sort(dist_indices,axis=1)
 
     for ind_spar in range(nspar):
         i = nind_list[ind_spar, 0]
@@ -142,13 +146,18 @@ def return_common_neighs(np.ndarray[DTYPE_t, ndim = 1] kstar,
         idx = 0
         idx2 = 0
 
-        for idx in range(kstar_i):
-            val_i = dist_indices[i, idx]
-            for idx2 in range(kstar_j):
-                val_j = dist_indices[j, idx2]
-                if val_i == val_j:
-                    count += 1
-                    break #no point in checking further
+        # Two-pointer intersection if sorted
+        while idx < kstar_i and idx2 < kstar_j:
+            val_i = sorted_dist_indices[i, idx]
+            val_j = sorted_dist_indices[j, idx2]
+            if val_i < val_j:
+                idx += 1
+            elif val_i > val_j:
+                idx2 += 1
+            else:
+                count += 1
+                idx += 1
+                idx2 += 1
 
         common_neighs_array[ind_spar] = count
 
@@ -169,6 +178,9 @@ def return_common_neighs_comp_mat(np.ndarray[DTYPE_t, ndim = 1] kstar,
 
     cdef np.ndarray[DTYPE_t, ndim=1] common_neighs_array = np.zeros(nspar, dtype=np.int_)
     cdef np.ndarray[DTYPE_t, ndim=2] common_neighs_mat = np.zeros((N,N), dtype=np.int_)
+    cdef np.ndarray[DTYPE_t, ndim=2] sorted_dist_indices = np.zeros((N, maxk), dtype=np.int_)
+
+    sorted_dist_indices = np.sort(dist_indices,axis=1)
 
     for ind_spar in range(nspar):
         i = nind_list[ind_spar, 0]
@@ -181,14 +193,18 @@ def return_common_neighs_comp_mat(np.ndarray[DTYPE_t, ndim = 1] kstar,
             idx = 0
             idx2 = 0
 
-            for idx in range(kstar_i):
-                val_i = dist_indices[i, idx]
-                for idx2 in range(kstar_j):
-                    val_j = dist_indices[j, idx2]
-                    if val_i == val_j:
-                        count += 1
-                        break #no point in checking further
-
+            # Two-pointer intersection if sorted
+            while idx < kstar_i and idx2 < kstar_j:
+                val_i = sorted_dist_indices[i, idx]
+                val_j = sorted_dist_indices[j, idx2]
+                if val_i < val_j:
+                    idx += 1
+                elif val_i > val_j:
+                    idx2 += 1
+                else:
+                    count += 1
+                    idx += 1
+                    idx2 += 1
             common_neighs_mat[i,j] = count
             common_neighs_mat[j,i] = count
             common_neighs_array[ind_spar] = count
@@ -201,48 +217,6 @@ def return_common_neighs_comp_mat(np.ndarray[DTYPE_t, ndim = 1] kstar,
 # ----------------------------------------------------------------------------------------------
 
 @cython.boundscheck(False)
-@cython.wraparound(False)
-def return_cross_common_neighs( np.ndarray[DTYPE_t, ndim = 1] kstar,
-                                np.ndarray[DTYPE_t, ndim = 1] kstar_test,
-                                np.ndarray[DTYPE_t, ndim = 2] dist_indices,
-                                np.ndarray[DTYPE_t, ndim = 2] cross_dist_indices,
-                                np.ndarray[DTYPE_t, ndim = 2] cross_nind_list
-                                ):
-
-    cdef DTYPE_t N = kstar_test.shape[0]
-    cdef DTYPE_t maxk = kstar_test.shape[1]
-    cdef DTYPE_t nspar = cross_nind_list.shape[0]
-
-    cdef DTYPE_t i, j, ind_spar, count, kstar_i, kstar_j, idx, idx2, val_i, val_j
-
-    cdef np.ndarray[DTYPE_t, ndim=1] common_neighs_array = np.zeros(nspar, dtype=np.int_)
-
-    for ind_spar in range(nspar):
-        i = cross_nind_list[ind_spar, 0]
-        j = cross_nind_list[ind_spar, 1]
-
-        kstar_i = kstar_test[i]
-        kstar_j = kstar[j]
-
-        count = 0
-        idx = 0
-        idx2 = 0
-
-        for idx in range(kstar_i):
-            val_i = cross_dist_indices[i, idx]
-            for idx2 in range(kstar_j):
-                val_j = dist_indices[j, idx2]
-                if val_i == val_j:
-                    count += 1
-                    break #no point in checking further
-
-        common_neighs_array[ind_spar] = count
-
-    return common_neighs_array
-# ----------------------------------------------------------------------------------------------
-
-
-@cython.boundscheck(False)
 @cython.cdivision(True)
 def return_diag_inv_deltaFs_cross_covariance_LSDI(long[:,:] nind_list,      # nspar x 2
                                         double[:,:] p,                  # neigh_similarity_index matrix (NxN)
@@ -252,37 +226,41 @@ def return_diag_inv_deltaFs_cross_covariance_LSDI(long[:,:] nind_list,      # ns
                                         ):
     cdef int nspar = nind_list.shape[0]
 
-    inv_Gamma_nonview   = np.zeros(nspar, dtype=floatTYPE)       # inverse of diagonal of Gamma matrix
+    inv_Gamma_nonview   = np.zeros(nspar, dtype=np.float_)       # inverse of diagonal of Gamma matrix
     cdef double[::1] inv_Gamma = inv_Gamma_nonview
     
     #support
-    denom_nonview   = np.zeros(nspar, dtype=floatTYPE)
+    denom_nonview   = np.zeros(nspar, dtype=np.float_)
     cdef double[::1] denom = denom_nonview
 
-    cdef double gamma, ptot, sgn
-    cdef int i,j,l,m,a,b  
+    cdef double gamma,sgn
+    cdef int i,j,l,m,a,b
+    cdef np.ndarray[DTYPE_t, ndim = 1] ptot = np.zeros(nspar, dtype = np.int_)
 
-    for a in range(nspar):
+    for a in prange(nspar, nogil = True):
         i = nind_list[a, 0]
         j = nind_list[a, 1]
         inv_Gamma[a] = Fij_var_array[a]
         denom[a] += Fij_var_array[a]*Fij_var_array[a]
+
+
         for b in range(a+1, nspar):
             l = nind_list[b, 0]
             m = nind_list[b, 1]
             gamma = 0
-            ptot = 0
+            ptot[a] = 0
+            
             if p[i,l] != 0:
-                ptot += 1
+                ptot[a] += 1
                 gamma += p[i,l]*seps0[a]*seps0[b]
             if p[i,m] != 0:
                 gamma += p[i,m]*seps0[a]*seps1[b]
             if p[j,l] != 0:
-                ptot += 1
+                ptot[a] += 1
                 gamma += p[j,l]*seps1[a]*seps0[b]
             if p[j,m] != 0:
                 gamma += p[j,m]*seps1[a]*seps1[b]
-            if ptot != 0:
+            if ptot[a] != 0:
                 denom[a] += gamma * gamma / 16.
                 denom[b] += gamma * gamma / 16.
         
@@ -307,8 +285,8 @@ def return_grads_and_var_from_coords(  np.ndarray[floatTYPE_t, ndim = 2] X,
     cdef DTYPE_t N = X.shape[0]
     cdef DTYPE_t dims = X.shape[1]
     cdef DTYPE_t kstar_max = np.max(kstar)
-    cdef np.ndarray[floatTYPE_t, ndim = 2] grads = np.zeros((N, dims), dtype=floatTYPE)
-    cdef np.ndarray[floatTYPE_t, ndim = 2] grads_var = np.zeros((N, dims), dtype=floatTYPE)
+    cdef np.ndarray[floatTYPE_t, ndim = 2] grads = np.zeros((N, dims))
+    cdef np.ndarray[floatTYPE_t, ndim = 2] grads_var = np.zeros((N, dims))
     
     cdef DTYPE_t i, j, dim, ki, dim2
     cdef DTYPE_t ind_j
@@ -352,8 +330,8 @@ def return_grads_and_covmat_from_coords(   np.ndarray[floatTYPE_t, ndim = 2] X,
     cdef DTYPE_t N = X.shape[0]
     cdef DTYPE_t dims = X.shape[1]
     cdef DTYPE_t kstar_max = np.max(kstar)
-    cdef np.ndarray[floatTYPE_t, ndim = 2] grads = np.zeros((N, dims), dtype=floatTYPE)
-    cdef np.ndarray[floatTYPE_t, ndim = 3] grads_covmat = np.zeros((N, dims, dims), dtype=floatTYPE)
+    cdef np.ndarray[floatTYPE_t, ndim = 2] grads = np.zeros((N, dims))
+    cdef np.ndarray[floatTYPE_t, ndim = 3] grads_covmat = np.zeros((N, dims, dims))
 
     cdef DTYPE_t i, j, dim, ki, dim2
     cdef DTYPE_t ind_j
@@ -404,8 +382,8 @@ def return_grads_and_var_from_nnvecdiffs(   np.ndarray[floatTYPE_t, ndim = 2] ne
     cdef DTYPE_t N = kstar.shape[0]
     cdef DTYPE_t dims = neigh_vector_diffs.shape[1]
     cdef DTYPE_t kstar_max = np.max(kstar)
-    cdef np.ndarray[floatTYPE_t, ndim = 2] grads = np.zeros((N, dims), dtype=floatTYPE)
-    cdef np.ndarray[floatTYPE_t, ndim = 2] grads_var = np.zeros((N, dims), dtype=floatTYPE)
+    cdef np.ndarray[floatTYPE_t, ndim = 2] grads = np.zeros((N, dims))
+    cdef np.ndarray[floatTYPE_t, ndim = 2] grads_var = np.zeros((N, dims))
     
     cdef DTYPE_t i, j, dim, ki, dim2
     cdef DTYPE_t ind_j
@@ -450,8 +428,8 @@ def return_grads_and_covmat_from_nnvecdiffs(np.ndarray[floatTYPE_t, ndim = 2] ne
     cdef DTYPE_t N = kstar.shape[0]
     cdef DTYPE_t dims = neigh_vector_diffs.shape[1]
     cdef DTYPE_t kstar_max = np.max(kstar)
-    cdef np.ndarray[floatTYPE_t, ndim = 2] grads = np.zeros((N, dims), dtype=floatTYPE)
-    cdef np.ndarray[floatTYPE_t, ndim = 3] grads_covmat = np.zeros((N, dims, dims), dtype=floatTYPE)
+    cdef np.ndarray[floatTYPE_t, ndim = 2] grads = np.zeros((N, dims))
+    cdef np.ndarray[floatTYPE_t, ndim = 3] grads_covmat = np.zeros((N, dims, dims))
 
     cdef DTYPE_t i, j, dim, ki, dim2
     cdef DTYPE_t ind_j
@@ -490,6 +468,7 @@ def return_grads_and_covmat_from_nnvecdiffs(np.ndarray[floatTYPE_t, ndim = 2] ne
     return grads, grads_covmat
 
 # ----------------------------------------------------------------------------------------------
+
 
 @cython.boundscheck(False)
 @cython.cdivision(True)

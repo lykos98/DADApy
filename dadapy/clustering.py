@@ -1,5 +1,3 @@
-# Copyright 2021-2023 The DADApy Authors. All Rights Reserved.
-#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -108,30 +106,89 @@ class Clustering(DensityEstimation):
 
         """
 
-        if not self._density_computed_w_bmti:
-            #names only for consistency w bmti
-            self.compute_neigh_indices()
-            self.Fij_array     = np.zeros(self.nspar) 
-            self.Fij_var_array = np.zeros(self.nspar) 
-
-            for edge_idx, edge in enumerate(self.nind_list):
-                i, j = edge
-
-                self.Fij_array[edge_idx]      = self.log_den[i] - self.log_den[j]
-                self.Fij_var_array[edge_idx]  = np.sqrt(self.log_den_err[i] ** 2 + self.log_den_err[j] ** 2)
-
-
-
         H = np.empty_like(prototype=self.distances, dtype=np.float64)
         F = np.zeros(shape=self.distances.shape, dtype=np.float64)
         H[:, 0] = 0
-        for i in range(self.N):
-            idx_start = self.nind_iptr[i]
-            for k in range(1, self.kstar[i]):
-                edge_idx = idx_start + k - 1
-                H[i, k] = self.Fij_array[edge_idx] 
-                H[i, k] /= self.Fij_var_array[edge_idx] 
-                H[i, k] = (1 + sp.special.erf(-H[i, k] / np.sqrt(2))) / 2
+
+        if self._density_computed_w_bmti:
+            #names only for consistency w bmti
+
+            dF = np.empty_like(self.distances)
+            dF_var = np.empty_like(self.distances)
+            k=0
+
+            #expand fij array into matrix
+            for i in range(self.N):
+                for j in range (1,self.kstar[i]):
+                    dF[i,j] = self.Fij_array[k]
+                    dF_var[i,j] = self.Fij_var_array[k]
+                    k = k+1
+
+            #compute differences up to first hop
+            for i in range(self.N):
+                for l in range(1,self.kstar[i]):
+                    j = self.dist_indices[i,l]
+                    indexes, idx_a, idx_b = np.intersect1d(self.dist_indices[i,1:self.kstar[i]], 
+                                                           self.dist_indices[j,1:self.kstar[j]],
+                                                           return_indices=True)
+                    idx_a = idx_a + 1
+                    idx_b = idx_b + 1
+                    s = 0.
+                    w = 0.
+                    if (len(idx_a) > 1):
+
+                        df_a = dF[i, idx_a]
+                        df_b = dF[i, idx_b]
+
+                        df_var_a = dF_var[i, idx_a] 
+                        df_var_b = dF_var[i, idx_b] 
+
+                        den = df_var_a + df_var_b
+                        diff = df_a - df_b
+                        s = np.sum(diff/den)
+                        w = np.sum(1./den)
+                        
+                        #for k in range(len(idx_a)):
+                        #    if np.isclose(dF_var[i,idx_a[k]] + dF_var[j,idx_b[k]] , 0):
+                        #        print(dF_var[i,idx_a[k]], dF_var[j,idx_b[k]])
+                        #    s = s + (dF[i,idx_a[k]] - dF[j, idx_b[k]])/(dF_var[i,idx_a[k]] + dF_var[j,idx_b[k]])
+                        #    w = w + 1./(dF_var[i,idx_a[k]] + dF_var[j,idx_b[k]])
+
+                        el_base = dF[i,l]
+                        se_base = dF_var[i,l]
+                        if w > 0.:
+                            el_one_nn = s/w
+                            se_one_nn = 1./w
+                            el_regularized  = (el_base/se_base + el_one_nn/se_one_nn)/(1./se_base + 1./se_one_nn)
+                            se_regularized  = 1./(1./se_base + 1./se_one_nn)
+                        else:
+                            el_regularized = dF[i,l]
+                            se_regularized = dF_var[i,l]
+                    else:
+                        el_regularized = dF[i,l]
+                        se_regularized = dF_var[i,l]
+
+                    H[i,l] = el_regularized/np.sqrt(se_regularized)
+                    H[i,l] = 0.5 * (1 + sp.special.erf(H[i,l]/np.sqrt(2)))
+            #for i in range(self.N):
+            #    idx_start = self.nind_iptr[i]
+            #    for k in range(1, self.kstar[i]):
+            #        edge_idx = idx_start + k - 1
+            #        H[i, k] = self.Fij_array[edge_idx] 
+            #        H[i, k] /= self.Fij_var_array[edge_idx] 
+            #        H[i, k] = (1 + sp.special.erf(-H[i, k] / np.sqrt(2))) / 2
+
+        else:
+            for i in range(self.N):
+                for k in range(1, self.kstar[i]):
+                    j = self.dist_indices[i,k]
+                    H[i, k] =  self.log_den[i] - self.log_den[j]
+                    H[i, k] /= np.sqrt(self.log_den_err[i] ** 2 + self.log_den_err[k] ** 2)
+                    H[i, k] = (1 + sp.special.erf(-H[i, k] / np.sqrt(2))) / 2
+
+
+
+
         n = 0
         for i in range(self.N):
             t = 1
@@ -157,53 +214,27 @@ class Clustering(DensityEstimation):
         print(rf"P Matrix Sparsity: {sparsity:.4f}")
         return P
 
-    def compute_clustering_SDP(self, top_k_ev: Union[None, int] = None, 
-                                     diagnostic_plots: bool = False,
-                                     n_clusters : Union[None,int] = None):
-        
-        """
-        Performs Spectral Density Peaks (SDP) clustering.
+    def compute_clustering_SDP(self, top_k_ev: Union[None, int]     = None, 
+                                     n_clusters : Union[None,int]   = None,
+                                     diagnostic_plots: bool         = False
+                               ):
+        """Compute clustering according to the algorithm SDP (Spectral Density Peak).
 
-        This function constructs a transition probability matrix using a random walk approach, 
-        computes its eigenvalues and eigenvectors, and then applies k-means clustering to 
-        group data points based on spectral components. 
-
-        The method follows these steps:
-        1. Validates input data and ensures required attributes are computed.
-        2. Builds a sparse random walk transition matrix.
-        3. Computes the top eigenvalues and eigenvectors of the transition matrix.
-        4. Identifies an optimal number of clusters using eigenvalue gaps.
-        5. Applies k-means clustering to the top eigenvectors.
-        6. Identifies density peaks as cluster representatives.
-        7. Optionally visualizes the results with diagnostic plots.
 
         Args:
-            top_k_ev (int, optional): Number of top eigenvalues to retain. If not provided, 
-                it is heuristically set to the cube root of the number of data points.
-            diagnostic_plots (bool, optional): If True, generates diagnostic plots for 
-                eigenvalues, eigengaps, and clustering results.
-
-        Raises:
-            ValueError: If essential data (distances, density estimates, etc.) are missing.
+            top_k_ev    (None, int): Number of eigenvalues to keep while performing eigendecomposition
+                                     of the laplacian of the neighborhood graph. If `None` default number
+                                     of eigenvalues to keep is set as `cube_root(dataset_size)`
+            n_clusters  (None, int): Number of clusters to force the procedure to obtain. If `None` by 
+                                     default the number of cluster is obtained by looking at the maximum
+                                     gap between two successives eigenvalues
+            diagnostic_plots (bool): Produce plots of eigenvalue distribution and eigen-gaps distribution
 
         Returns:
-            None: The function updates the object's attributes:
-                - `self.N_clusters` (int): Number of clusters found.
-                - `self.cluster_assignment` (ndarray): Cluster labels for each data point.
-                - `self.cluster_centers` (ndarray): Coordinates of the density peaks.
+            cluster_assignment (np.ndarray(int)): assignment of points to specific clusters
 
-        Notes:
-            - The transition matrix `P` is built using density-based transition probabilities.
-            - Eigenvalues are analyzed to determine an optimal cluster count.
-            - KMeans clustering is performed on the leading eigenvectors.
-            - Density peaks serve as cluster centers.
-            - Diagnostic plots illustrate eigenvalue distribution and clustering structure.
-
-        Example:
-            ```python
-            model = SDPClustering()
-            model.sdp(top_k_ev=10, diagnostic_plots=True)
-            ```
+        References:
+            To Be
         """
 
         self._density_computed_w_bmti = False
@@ -215,14 +246,10 @@ class Clustering(DensityEstimation):
             print("Density is not provided, using BMTI estimation for delta_f")
             self.compute_deltaFs()
             self._density_computed_w_bmti = True
-            self.Fij_array = -self.Fij_array
-            self.Fij_var_array = np.sqrt(self.Fij_var_array)
 
             self.log_den     = np.zeros(self.N)
             self.log_den_err = np.zeros(self.N)
 
-            #avoid having none values, they are not required for clustering procedure
-            #we only need delta_fs with their variance
         if not (self.log_den is None) and self.log_den_err is None:
             raise ValueError("log_den appears to be computed but log_den_err is not provided")
         if not (type(self.log_den) is np.ndarray) or not (type(self.log_den_err) is np.ndarray):
@@ -233,7 +260,7 @@ class Clustering(DensityEstimation):
         stop   = time.monotonic() 
 
         if self.verb: 
-            print(f"Building random walk: ")
+            print("Building random walk: ")
             print(f"\tElapsed time {stop - start: .2f}s")
 
         if top_k_ev is None:
@@ -253,11 +280,11 @@ class Clustering(DensityEstimation):
                 A=P, k= top_k_ev, sigma=1 - machine_epsilon, which="LM", v0=v0
             )
 
-        eigenvalues = np.real(val=1 - eigenvalues)
-        eigenvectors = np.real(val=eigenvectors)
-        eigenvalue_indeces = np.argsort(a=eigenvalues)
-        eigenvalues = eigenvalues[eigenvalue_indeces]
-        eigenvectors = eigenvectors[:, eigenvalue_indeces]
+        eigenvalues         = np.real(val=1 - eigenvalues)
+        eigenvectors        = np.real(val=eigenvectors)
+        eigenvalue_indeces  = np.argsort(a=eigenvalues)
+        eigenvalues         = eigenvalues[eigenvalue_indeces]
+        eigenvectors        = eigenvectors[:, eigenvalue_indeces]
 
         title = rf"First ${top_k_ev}$ $L$ Eigenvalues"
         n_negative = np.argmax(a=eigenvalues > 0)
@@ -360,7 +387,7 @@ class Clustering(DensityEstimation):
         stop = time.monotonic()
 
         if self.verb: 
-            print(f"Clustering eigencomponents w/ KMeans: ")
+            print("Clustering eigencomponents w/ KMeans: ")
             print(f"\tElapsed time {stop - start: .2f}s")
 
         self.N_clusters = n_clusters

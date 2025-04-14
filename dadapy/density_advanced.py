@@ -41,16 +41,6 @@ from dadapy.neigh_graph import NeighGraph
 
 cores = multiprocessing.cpu_count()
 
-def _compute_log_likelihood_diag(f: jax.numpy.array, 
-                                 c: jax.numpy.array, 
-                                 n_ind_list: jax.numpy.array, 
-                                 delta_fij_est: jax.numpy.array) -> float:
-    fi = f[n_ind_list[:,0]]
-    fj = f[n_ind_list[:,1]]
-    delta_fij = fi - fj - delta_fij_est
-    return -jax.numpy.sum(delta_fij * c * delta_fij)
-
-
 class DensityAdvanced(DensityEstimation, NeighGraph):
     """Computes the log-density gradient and its covariance at each point and other log-density-related properties.
 

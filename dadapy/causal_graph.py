@@ -427,9 +427,9 @@ class CausalGraph(DiffImbalance):
                     data_A=coords_present,
                     data_B=coords_future,
                     periods_A=self.periods,
-                    periods_B=None
-                    if self.periods is None
-                    else self.periods[target_var],
+                    periods_B=(
+                        None if self.periods is None else self.periods[target_var]
+                    ),
                     seed=self.seed,
                     num_epochs=num_epochs,
                     batches_per_epoch=batches_per_epoch,

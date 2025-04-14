@@ -1,4 +1,3 @@
-
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +12,7 @@
 # limitations under the License.
 # ==============================================================================
 
-"""Module for testing SDP clustering method"""
+"""Module for testing SDP clustering method."""
 
 import os
 
@@ -131,15 +130,12 @@ expected_cluster_assignment = np.array(
 )
 
 
-
 def test_clustering_SDP():
     """Test the clustering operations work correctly."""
     data = Data(X)
-    data.compute_distances(X.shape[0]//5)
+    data.compute_distances(X.shape[0] // 5)
 
-    _ = data.compute_clustering_SDP(n_clusters = 2)
+    _ = data.compute_clustering_SDP(n_clusters=2)
 
     assert data.N_clusters == 2
     assert (data.cluster_assignment == expected_cluster_assignment).all()
-
-

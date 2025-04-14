@@ -20,19 +20,18 @@ Density-based clustering algorithms are implemented as methods of this class.
 import multiprocessing
 import time
 import warnings
+from typing import Union
 
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy as sp
-import matplotlib.pyplot as plt
+from scipy.sparse import coo_matrix
+from scipy.sparse.linalg import eigs
+from sklearn.cluster import KMeans
 
-from typing import Union
 from dadapy._cython import cython_clustering as cf
 from dadapy._cython import cython_clustering_v2 as cf2
 from dadapy.density_estimation import DensityEstimation
-from sklearn.cluster import KMeans
-from scipy.sparse import coo_matrix, diags
-from scipy.sparse.linalg import eigs
-
 
 cores = multiprocessing.cpu_count()
 
@@ -81,12 +80,68 @@ class Clustering(DensityEstimation):
         self.delta = None  # Minimum distance from an element with higher density
         self.ref = None  # Index of the nearest element with higher density
 
-    def _build_random_walk(self):
-        """
-        Constructs a sparse transition probability matrix for a random walk process.
+    def _compute_random_walk_truncated_bmti(self, H, F):
+        # names only for consistency w bmti
 
-        This function computes transition probabilities based on density estimates and their 
-        associated uncertainties. It normalizes the transition probabilities and stores them 
+        dF = np.empty_like(self.distances)
+        dF_var = np.empty_like(self.distances)
+        k = 0
+
+        # expand fij array into matrix
+        for i in range(self.N):
+            for j in range(1, self.kstar[i]):
+                dF[i, j] = self.Fij_array[k]
+                dF_var[i, j] = self.Fij_var_array[k]
+                k = k + 1
+
+        # compute differences up to first hop
+        for i in range(self.N):
+            for ngbh in range(1, self.kstar[i]):
+                j = self.dist_indices[i, ngbh]
+                indexes, idx_a, idx_b = np.intersect1d(
+                    self.dist_indices[i, 1 : self.kstar[i]],
+                    self.dist_indices[j, 1 : self.kstar[j]],
+                    return_indices=True,
+                )
+                idx_a = idx_a + 1
+                idx_b = idx_b + 1
+                s = 0.0
+                w = 0.0
+                if len(idx_a) > 1:
+                    df_a = dF[i, idx_a]
+                    df_b = dF[i, idx_b]
+
+                    df_var_a = dF_var[i, idx_a]
+                    df_var_b = dF_var[i, idx_b]
+
+                    den = df_var_a + df_var_b
+                    diff = df_a - df_b
+                    s = np.sum(diff / den)
+                    w = np.sum(1.0 / den)
+
+                    el_base = dF[i, ngbh]
+                    se_base = dF_var[i, ngbh]
+
+                    el_one_nn = s / w
+                    se_one_nn = 1.0 / w
+
+                    numerator = el_base / se_base + el_one_nn / se_one_nn
+                    denominator = 1.0 / se_base + 1.0 / se_one_nn
+                    el_regularized = numerator / denominator
+
+                    se_regularized = 1.0 / (1.0 / se_base + 1.0 / se_one_nn)
+                else:
+                    el_regularized = dF[i, ngbh]
+                    se_regularized = dF_var[i, ngbh]
+
+                H[i, ngbh] = el_regularized / np.sqrt(se_regularized)
+                H[i, ngbh] = 0.5 * (1 + sp.special.erf(H[i, ngbh] / np.sqrt(2)))
+
+    def _build_random_walk(self):
+        """Construct a sparse transition probability matrix for a random walk process.
+
+        This function computes transition probabilities based on density estimates and their
+        associated uncertainties. It normalizes the transition probabilities and stores them
         in a sparse matrix representation.
 
         The method follows these steps:
@@ -103,91 +158,23 @@ class Clustering(DensityEstimation):
             - `F[i, k]` is iteratively updated to ensure proper probability normalization.
             - The final transition matrix is stored in `P` in COO sparse matrix format.
             - The sparsity of `P` is printed to the console.
-
         """
-
         H = np.empty_like(prototype=self.distances, dtype=np.float64)
         F = np.zeros(shape=self.distances.shape, dtype=np.float64)
         H[:, 0] = 0
 
         if self._density_computed_w_bmti:
-            #names only for consistency w bmti
-
-            dF = np.empty_like(self.distances)
-            dF_var = np.empty_like(self.distances)
-            k=0
-
-            #expand fij array into matrix
-            for i in range(self.N):
-                for j in range (1,self.kstar[i]):
-                    dF[i,j] = self.Fij_array[k]
-                    dF_var[i,j] = self.Fij_var_array[k]
-                    k = k+1
-
-            #compute differences up to first hop
-            for i in range(self.N):
-                for l in range(1,self.kstar[i]):
-                    j = self.dist_indices[i,l]
-                    indexes, idx_a, idx_b = np.intersect1d(self.dist_indices[i,1:self.kstar[i]], 
-                                                           self.dist_indices[j,1:self.kstar[j]],
-                                                           return_indices=True)
-                    idx_a = idx_a + 1
-                    idx_b = idx_b + 1
-                    s = 0.
-                    w = 0.
-                    if (len(idx_a) > 1):
-
-                        df_a = dF[i, idx_a]
-                        df_b = dF[i, idx_b]
-
-                        df_var_a = dF_var[i, idx_a] 
-                        df_var_b = dF_var[i, idx_b] 
-
-                        den = df_var_a + df_var_b
-                        diff = df_a - df_b
-                        s = np.sum(diff/den)
-                        w = np.sum(1./den)
-                        
-                        #for k in range(len(idx_a)):
-                        #    if np.isclose(dF_var[i,idx_a[k]] + dF_var[j,idx_b[k]] , 0):
-                        #        print(dF_var[i,idx_a[k]], dF_var[j,idx_b[k]])
-                        #    s = s + (dF[i,idx_a[k]] - dF[j, idx_b[k]])/(dF_var[i,idx_a[k]] + dF_var[j,idx_b[k]])
-                        #    w = w + 1./(dF_var[i,idx_a[k]] + dF_var[j,idx_b[k]])
-
-                        el_base = dF[i,l]
-                        se_base = dF_var[i,l]
-                        if w > 0.:
-                            el_one_nn = s/w
-                            se_one_nn = 1./w
-                            el_regularized  = (el_base/se_base + el_one_nn/se_one_nn)/(1./se_base + 1./se_one_nn)
-                            se_regularized  = 1./(1./se_base + 1./se_one_nn)
-                        else:
-                            el_regularized = dF[i,l]
-                            se_regularized = dF_var[i,l]
-                    else:
-                        el_regularized = dF[i,l]
-                        se_regularized = dF_var[i,l]
-
-                    H[i,l] = el_regularized/np.sqrt(se_regularized)
-                    H[i,l] = 0.5 * (1 + sp.special.erf(H[i,l]/np.sqrt(2)))
-            #for i in range(self.N):
-            #    idx_start = self.nind_iptr[i]
-            #    for k in range(1, self.kstar[i]):
-            #        edge_idx = idx_start + k - 1
-            #        H[i, k] = self.Fij_array[edge_idx] 
-            #        H[i, k] /= self.Fij_var_array[edge_idx] 
-            #        H[i, k] = (1 + sp.special.erf(-H[i, k] / np.sqrt(2))) / 2
+            self._compute_random_walk_truncated_bmti(H, F)
 
         else:
             for i in range(self.N):
                 for k in range(1, self.kstar[i]):
-                    j = self.dist_indices[i,k]
-                    H[i, k] =  self.log_den[i] - self.log_den[j]
-                    H[i, k] /= np.sqrt(self.log_den_err[i] ** 2 + self.log_den_err[k] ** 2)
+                    j = self.dist_indices[i, k]
+                    H[i, k] = self.log_den[i] - self.log_den[j]
+                    H[i, k] /= np.sqrt(
+                        self.log_den_err[i] ** 2 + self.log_den_err[k] ** 2
+                    )
                     H[i, k] = (1 + sp.special.erf(-H[i, k] / np.sqrt(2))) / 2
-
-
-
 
         n = 0
         for i in range(self.N):
@@ -202,30 +189,34 @@ class Clustering(DensityEstimation):
         row = np.arange(stop=n, step=1)
         col = np.arange(stop=n, step=1)
         data_ = np.arange(stop=n, step=1, dtype=np.float64)
-        l = 0
+
+        count = 0
         for i in range(self.N):
             for k in range(1, self.kstar[i]):
-                data_[l] = F[i, k]
-                row[l] = i
-                col[l] = self.dist_indices[i, k]
-                l += 1
-        P = coo_matrix(arg1=(data_, (row, col)), shape=(self.N, self.N), dtype=np.float64)
+                data_[count] = F[i, k]
+                row[count] = i
+                col[count] = self.dist_indices[i, k]
+                count += 1
+        P = coo_matrix(
+            arg1=(data_, (row, col)), shape=(self.N, self.N), dtype=np.float64
+        )
         sparsity = 1 - P.nnz / (P.shape[0] * P.shape[1])
         print(rf"P Matrix Sparsity: {sparsity:.4f}")
         return P
 
-    def compute_clustering_SDP(self, top_k_ev: Union[None, int]     = None, 
-                                     n_clusters : Union[None,int]   = None,
-                                     diagnostic_plots: bool         = False
-                               ):
+    def compute_clustering_SDP(
+        self,
+        top_k_ev: Union[None, int] = None,
+        n_clusters: Union[None, int] = None,
+        diagnostic_plots: bool = False,
+    ):
         """Compute clustering according to the algorithm SDP (Spectral Density Peak).
-
 
         Args:
             top_k_ev    (None, int): Number of eigenvalues to keep while performing eigendecomposition
                                      of the laplacian of the neighborhood graph. If `None` default number
                                      of eigenvalues to keep is set as `cube_root(dataset_size)`
-            n_clusters  (None, int): Number of clusters to force the procedure to obtain. If `None` by 
+            n_clusters  (None, int): Number of clusters to force the procedure to obtain. If `None` by
                                      default the number of cluster is obtained by looking at the maximum
                                      gap between two successives eigenvalues
             diagnostic_plots (bool): Produce plots of eigenvalue distribution and eigen-gaps distribution
@@ -236,10 +227,9 @@ class Clustering(DensityEstimation):
         References:
             To Be
         """
-
         self._density_computed_w_bmti = False
 
-        if self.distances is None or self.dist_indices is None: 
+        if self.distances is None or self.dist_indices is None:
             raise ValueError("Please compute distances between datapoints")
 
         if self.log_den is None or self.kstar is None:
@@ -247,138 +237,66 @@ class Clustering(DensityEstimation):
             self.compute_deltaFs()
             self._density_computed_w_bmti = True
 
-            self.log_den     = np.zeros(self.N)
+            self.log_den = np.zeros(self.N)
             self.log_den_err = np.zeros(self.N)
 
         if not (self.log_den is None) and self.log_den_err is None:
-            raise ValueError("log_den appears to be computed but log_den_err is not provided")
-        if not (type(self.log_den) is np.ndarray) or not (type(self.log_den_err) is np.ndarray):
-            raise TypeError("log_den or log_den_err are not np.arrays")
+            raise ValueError(
+                "log_den appears to be computed but log_den_err is not provided"
+            )
 
         start = time.monotonic()
         P = self._build_random_walk()
-        stop   = time.monotonic() 
+        stop = time.monotonic()
 
-        if self.verb: 
+        if self.verb:
             print("Building random walk: ")
             print(f"\tElapsed time {stop - start: .2f}s")
 
         if top_k_ev is None:
-            top_k_ev = int(np.cbrt(self.N)) 
+            top_k_ev = int(np.cbrt(self.N))
             print(f"Heuristic selection of eigenvals to keep --> {top_k_ev}")
-        elif top_k_ev < int(np.cbrt(self.N)):
-            print(f"Selected number of eigenvals too high, using --> {top_k_ev}")
         else:
             print(f"Using number of eigenvals --> {top_k_ev}")
 
         start = time.monotonic()
-        
+
         v0 = np.random.rand(self.N)
         machine_epsilon = np.finfo(np.float64).eps
+
         with np.errstate(divide="ignore", invalid="ignore"):
             eigenvalues, eigenvectors = eigs(
-                A=P, k= top_k_ev, sigma=1 - machine_epsilon, which="LM", v0=v0
+                A=P, k=top_k_ev, sigma=1 - machine_epsilon, which="LM", v0=v0
             )
 
-        eigenvalues         = np.real(val=1 - eigenvalues)
-        eigenvectors        = np.real(val=eigenvectors)
-        eigenvalue_indeces  = np.argsort(a=eigenvalues)
-        eigenvalues         = eigenvalues[eigenvalue_indeces]
-        eigenvectors        = eigenvectors[:, eigenvalue_indeces]
-
-        title = rf"First ${top_k_ev}$ $L$ Eigenvalues"
-        n_negative = np.argmax(a=eigenvalues > 0)
-
+        eigenvalues = np.real(val=1 - eigenvalues)
+        eigenvectors = np.real(val=eigenvectors)
+        eigenvalue_indeces = np.argsort(a=eigenvalues)
+        eigenvalues = eigenvalues[eigenvalue_indeces]
+        eigenvectors = eigenvectors[:, eigenvalue_indeces]
 
         stop = time.monotonic()
 
-        if self.verb: 
-            print(f"Computing eigenvals: ")
+        if self.verb:
+            print("Computing eigenvals: ")
             print(f"\tElapsed time {stop - start: .2f}s")
 
-        step = int(top_k_ev / 5)
-        s = 1 / top_k_ev * 500
-        eps_ratio = 2
-        n_zeros = np.argmax(a=eigenvalues > 0)
-        if n_negative > 0:
-            eigenvalues -= eigenvalues[0]
-            eps = 10 ** (np.log10(eigenvalues[n_zeros]) - eps_ratio)
+        k_min = 2
 
-        if diagnostic_plots:
-            title += rf" (Shifted) $\quad n_0 = {n_zeros}$"
-            fig, axs = plt.subplots(
-                ncols=2,
-                figsize=(2 * plt.rcParams["figure.figsize"][0], plt.rcParams["figure.figsize"][1]),
-                layout="tight",
-            )
-            xticks = range(1, top_k_ev + step + 1, step)
+        # find optimal values of eigenvalues to keep
 
-            for ax, yscale in zip(axs, ["linear", "log"]):
-                if n_negative > 0 and yscale == "log":
-                    title += rf"$\quad \varepsilon_0 = {eps:.0e}$"
-                ax.set(aspect="auto", title=title, xticks=xticks, yscale=yscale)
-                if n_negative > 0:
-                    if yscale == "log":
-                        y_ = [eps] * n_zeros + list(eigenvalues[n_zeros:n_negative])
-                    else:
-                        y_ = [0] * n_zeros + list(eigenvalues[n_zeros:n_negative])
-                    ax.scatter(x=range(1, n_negative + 1), y=y_, s=s, c="red", marker="D", zorder=2)
-                ax.scatter(
-                    x=range(1 + n_negative, top_k_ev + 1),
-                    y=eigenvalues[n_negative:],
-                    s=s,
-                    c="black",
-                    zorder=2,
-                )
-                ax.grid()
-
-        k_min = None
-
-        if n_negative > 0:
-            k_min = n_zeros + 1 if k_min is None else max(n_zeros, k_min)
-        else:
-            k_min = 2
-
-        #find optimal values of eigenvalues to keep
-
+        eigenvalues = eigenvalues - eigenvalues.min()
         k_range = range(k_min, top_k_ev)
         eigengaps = np.diff(a=eigenvalues)[np.array(object=k_range) - 1]
         relative_eigengaps = eigengaps / eigenvalues[np.array(object=k_range) - 1]
         optimal_k_values = np.argsort(a=relative_eigengaps)[::-1] + k_min
 
-        if diagnostic_plots:
-            step = max(int((top_k_ev - k_min) / 5), 1)
-            s = 1 / (top_k_ev - k_min) * 500
-            markersize = np.sqrt(s)
-            fig, ax = plt.subplots(figsize=plt.rcParams["figure.figsize"], layout="tight")
-            title = rf"Relative Eigengaps $\quad (k_\text{{min}} = {k_min}$)"
-            title += rf"$\quad k_\text{{best}} = {optimal_k_values[0]}$"
-            ax.set(aspect="auto", title=title, xticks=k_range[::step])
-            ax.plot(
-                k_range,
-                relative_eigengaps,
-                c="black",
-                marker="o",
-                markersize=markersize,
-                linestyle="-",
-                linewidth=1,
-                zorder=2,
-            )
-            ax.scatter(
-                x=k_range[optimal_k_values[0] - k_min],
-                y=relative_eigengaps[optimal_k_values[0] - k_min],
-                s=s,
-                c="red",
-                marker="D",
-                zorder=2,
-            )
-            ax.grid()
-
-        #spectral part
+        # spectral part
         start = time.monotonic()
 
         if n_clusters is None or n_clusters <= 0:
             n_clusters = optimal_k_values[0]
+            print(f"Found n clusters {n_clusters}")
 
         kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(
             X=eigenvectors[:, :n_clusters]
@@ -386,13 +304,21 @@ class Clustering(DensityEstimation):
 
         stop = time.monotonic()
 
-        if self.verb: 
+        if self.verb:
             print("Clustering eigencomponents w/ KMeans: ")
             print(f"\tElapsed time {stop - start: .2f}s")
 
+        if diagnostic_plots:
+            plt.plot(eigenvalues, ".-")
+            plt.title("Eigenvalues")
+            plt.yscale("log")
+            plt.show()
+            plt.title("Eigen-gaps")
+            plt.plot(k_range, relative_eigengaps, ".-")
+            plt.yscale("log")
+
         self.N_clusters = n_clusters
         self.cluster_assignment = kmeans.labels_
-        #self.cluster_centers    = density_peaks
 
     def compute_clustering_ADP(self, Z=1.65, halo=False, v2=False):
         """Compute clustering according to the algorithm DPA.

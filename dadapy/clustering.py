@@ -159,7 +159,7 @@ class Clustering(DensityEstimation):
             - The final transition matrix is stored in `P` in COO sparse matrix format.
             - The sparsity of `P` is printed to the console.
         """
-        H = np.empty_like(prototype=self.distances, dtype=np.float64)
+        H = np.zeros(shape=self.distances.shape, dtype=np.float64)
         F = np.zeros(shape=self.distances.shape, dtype=np.float64)
         H[:, 0] = 0
 
@@ -186,6 +186,16 @@ class Clustering(DensityEstimation):
             normalization = np.sum(F[i, :])
             if normalization != 0:
                 F[i, :] /= normalization
+
+        self.transition_matrix = np.zeros((self.N, self.N), np.float64)
+        for i in range(self.N):
+            for k in range(1, self.kstar[i]):
+                j = self.dist_indices[i, k]
+                self.transition_matrix[i,j] = F[i, k]
+
+        #self.transition_matrix = self.transition_matrix / self.transition_matrix.sum(axis = 1)
+
+
         row = np.arange(stop=n, step=1)
         col = np.arange(stop=n, step=1)
         data_ = np.arange(stop=n, step=1, dtype=np.float64)
@@ -281,14 +291,15 @@ class Clustering(DensityEstimation):
             print("Computing eigenvals: ")
             print(f"\tElapsed time {stop - start: .2f}s")
 
-        k_min = 2
+        eps = np.finfo(np.float64).eps
+        k_min = np.where(eigenvalues > eps)[0][0]
 
         # find optimal values of eigenvalues to keep
 
         eigenvalues = eigenvalues - eigenvalues.min()
         k_range = range(k_min, top_k_ev)
         eigengaps = np.diff(a=eigenvalues)[np.array(object=k_range) - 1]
-        relative_eigengaps = eigengaps / eigenvalues[np.array(object=k_range) - 1]
+        relative_eigengaps = eigengaps / (eigenvalues[np.array(object=k_range) - 1] + eps)
         optimal_k_values = np.argsort(a=relative_eigengaps)[::-1] + k_min
 
         # spectral part
@@ -309,7 +320,7 @@ class Clustering(DensityEstimation):
             print(f"\tElapsed time {stop - start: .2f}s")
 
         if diagnostic_plots:
-            plt.plot(eigenvalues, ".-")
+            plt.plot([i for i,_ in enumerate(eigenvalues)], eigenvalues + eps, ".-")
             plt.title("Eigenvalues")
             plt.yscale("log")
             plt.show()
